@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catálogo de Jogos</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>🎮 Catálogo de Jogos</h1>
+</header>
+
+<main>
+  <section>
+    <h2>Cadastrar jogo</h2>
+    <form id="form">
+      <label>Título
+        <input id="titulo" required maxlength="80" placeholder="Ex.: Hollow Knight">
+      </label>
+      <label>Plataforma
+        <select id="plataforma"></select>
+      </label>
+      <label>Gênero
+        <select id="genero"></select>
+      </label>
+      <button type="submit">Adicionar</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Meus jogos</h2>
+    <div class="busca">
+      <input id="busca" type="search" placeholder="Pesquisar por título...">
+      <select id="filtro">
+        <option value="todos">Todos</option>
+        <option value="pendentes">Pendentes</option>
+        <option value="concluidos">Concluídos</option>
+      </select>
+    </div>
+    <div class="tabela">
+      <table>
+        <thead>
+          <tr><th>Título</th><th>Plataforma</th><th>Gênero</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody id="lista"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Estatísticas</h2>
+    <div id="stats"></div>
+  </section>
+</main>
+
+<script>
+const CHAVE = "catalogo_jogos";
+const PLATAFORMAS = ["PC", "PlayStation", "Xbox", "Nintendo Switch", "Mobile", "Outra"];
+const GENEROS = ["Ação", "Aventura", "RPG", "Estratégia", "Esporte", "Corrida", "Terror", "Simulação", "Puzzle", "Outro"];
+
+let jogos = carregar();
+
+function carregar() {
+  try { return JSON.parse(localStorage.getItem(CHAVE)) || []; }
+  catch (e) { return []; }
+}
+function salvar() {
+  try { localStorage.setItem(CHAVE, JSON.stringify(jogos)); } catch (e) {}
+}
+function proximoId() {
+  return jogos.reduce((m, j) => Math.max(m, j.id), 0) + 1;
+}
+function esc(txt) {
+  const d = document.createElement("div");
+  d.textContent = txt;
+  return d.innerHTML;
+}
+
+// Preenche os selects
+function preencher(id, itens) {
+  document.getElementById(id).innerHTML = itens.map(i => `<option>${i}</option>`).join("");
+}
+preencher("plataforma", PLATAFORMAS);
+preencher("genero", GENEROS);
+
+// Cadastrar
+document.getElementById("form").addEventListener("submit", e => {
+  e.preventDefault();
+  const titulo = document.getElementById("titulo").value.trim();
+  if (!titulo) return;
+  if (jogos.some(j => j.titulo.toLowerCase() === titulo.toLowerCase())) {
+    alert("Esse jogo já está cadastrado.");
+    return;
+  }
+  jogos.push({
+    id: proximoId(),
+    titulo,
+    plataforma: document.getElementById("plataforma").value,
+    genero: document.getElementById("genero").value,
+    concluido: false
+  });
+  salvar();
+  e.target.reset();
+  renderizar();
+});
+
+// Concluir / remover
+function alternar(id) {
+  const j = jogos.find(x => x.id === id);
+  if (j) { j.concluido = !j.concluido; salvar(); renderizar(); }
+}
+function remover(id) {
+  const j = jogos.find(x => x.id === id);
+  if (j && confirm(`Remover "${j.titulo}"?`)) {
+    jogos = jogos.filter(x => x.id !== id);
+    salvar(); renderizar();
+  }
+}
+
+// Lista com pesquisa e filtro
+function renderizarLista() {
+  const termo = document.getElementById("busca").value.trim().toLowerCase();
+  const filtro = document.getElementById("filtro").value;
+  const visiveis = jogos
+    .filter(j => j.titulo.toLowerCase().includes(termo))
+    .filter(j => filtro === "todos" || (filtro === "concluidos") === j.concluido)
+    .sort((a, b) => a.titulo.localeCompare(b.titulo, "pt-BR"));
+
+  const corpo = document.getElementById("lista");
+  if (!visiveis.length) {
+    corpo.innerHTML = `<tr><td colspan="5" class="vazio">Nenhum jogo encontrado.</td></tr>`;
+    return;
+  }
+  corpo.innerHTML = visiveis.map(j => `
+    <tr class="${j.concluido ? "feito" : ""}">
+      <td class="titulo">${esc(j.titulo)}</td>
+      <td>${esc(j.plataforma)}</td>
+      <td>${esc(j.genero)}</td>
+      <td><span class="badge ${j.concluido ? "ok" : ""}">${j.concluido ? "Concluído" : "Pendente"}</span></td>
+      <td>
+        <button class="sec" onclick="alternar(${j.id})">${j.concluido ? "Desmarcar" : "Concluir"}</button>
+        <button class="sec danger" onclick="remover(${j.id})">Remover</button>
+      </td>
+    </tr>`).join("");
+}
+
+// Estatísticas
+function contar(campo) {
+  const mapa = {};
+  jogos.forEach(j => mapa[j[campo]] = (mapa[j[campo]] || 0) + 1);
+  return Object.entries(mapa).sort((a, b) => b[1] - a[1]);
+}
+function barras(titulo, pares) {
+  const max = pares.length ? pares[0][1] : 1;
+  return `<div><h3>${titulo}</h3>` + pares.map(([nome, qtd]) => `
+    <div class="barra">
+      <span>${esc(nome)}</span>
+      <div class="trilho"><div class="preenche" style="width:${qtd / max * 100}%"></div></div>
+      <b>${qtd}</b>
+    </div>`).join("") + `</div>`;
+}
+function renderizarStats() {
+  const el = document.getElementById("stats");
+  const total = jogos.length;
+  if (!total) { el.innerHTML = `<div class="vazio">Cadastre jogos para ver as estatísticas.</div>`; return; }
+  const feitos = jogos.filter(j => j.concluido).length;
+  el.innerHTML = `
+    <div class="stats">
+      <div class="stat"><b>${total}</b><span>Total</span></div>
+      <div class="stat"><b>${feitos}</b><span>Concluídos</span></div>
+      <div class="stat"><b>${total - feitos}</b><span>Pendentes</span></div>
+      <div class="stat"><b>${Math.round(feitos / total * 100)}%</b><span>Taxa de conclusão</span></div>
+    </div>
+    <div class="grupos">
+      ${barras("Por plataforma", contar("plataforma"))}
+      ${barras("Por gênero", contar("genero"))}
+    </div>`;
+}
+
+function renderizar() { renderizarLista(); renderizarStats(); }
+document.getElementById("busca").addEventListener("input", renderizarLista);
+document.getElementById("filtro").addEventListener("change", renderizarLista);
+renderizar();
+</script>
+</body>
+</html>
